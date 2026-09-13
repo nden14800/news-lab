@@ -17,12 +17,7 @@ export async function onRequestGet(context) {
 
   const q = (url.searchParams.get("q") || "").trim();
   const category = (url.searchParams.get("category") || "general").trim();
-  const pageSize = clampInt(
-    url.searchParams.get("pageSize"),
-    18,
-    1,
-    20
-  );
+  const pageSize = clampInt(url.searchParams.get("pageSize"), 18, 1, 20);
 
   try {
     let articles = [];
@@ -30,6 +25,15 @@ export async function onRequestGet(context) {
     let endpoint = "";
 
     if (q) {
+      // News API の everything には現在 Japanese (ja) の language filter がないため、
+      // 日本向けソースを取得してから検索対象を限定する。
+      const jpSources = await fetchJapaneseSources(apiKey);
+      const sourceIds = jpSources
+        .map((source) => source?.id)
+        .filter(Boolean)
+        .slice(0, 20)
+        .join(",");
+
       const params = new URLSearchParams({
         q,
         sortBy: "publishedAt",
@@ -37,18 +41,13 @@ export async function onRequestGet(context) {
         page: "1"
       });
 
-      const apiUrl =
-        `https://newsapi.org/v2/everything?${params.toString()}`;
+      if (sourceIds) {
+        params.set("sources", sourceIds);
+      }
 
-      const response = await fetch(apiUrl, {
-        method: "GET",
-        headers: {
-          "X-Api-Key": apiKey,
-          "Accept": "application/json",
-          "User-Agent": "NewsLab-Experimental/1.0"
-        }
-      });
+      const apiUrl = `https://newsapi.org/v2/everything?${params.toString()}`;
 
+      const response = await newsApiFetch(apiUrl, apiKey);
       const data = await readJsonResponse(response);
 
       if (!response.ok || data.status === "error") {
@@ -85,46 +84,7 @@ export async function onRequestGet(context) {
         ? category
         : "general";
 
-      const sourceParams = new URLSearchParams({
-        country: "jp",
-        category: safeCategory
-      });
-
-      const sourcesUrl =
-        `https://newsapi.org/v2/top-headlines/sources?${sourceParams.toString()}`;
-
-      const sourcesResponse = await fetch(sourcesUrl, {
-        method: "GET",
-        headers: {
-          "X-Api-Key": apiKey,
-          "Accept": "application/json",
-          "User-Agent": "NewsLab-Experimental/1.0"
-        }
-      });
-
-      const sourcesData =
-        await readJsonResponse(sourcesResponse);
-
-      if (
-        !sourcesResponse.ok ||
-        sourcesData.status === "error"
-      ) {
-        return json(
-          {
-            status: "error",
-            code: sourcesData?.code || "sources_error",
-            message:
-              sourcesData?.message ||
-              `News API sources returned HTTP ${sourcesResponse.status}`
-          },
-          sourcesResponse.status
-        );
-      }
-
-      const sources = Array.isArray(sourcesData.sources)
-        ? sourcesData.sources
-        : [];
-
+      const sources = await fetchJapaneseSources(apiKey, safeCategory);
       const sourceIds = sources
         .map((source) => source?.id)
         .filter(Boolean)
@@ -132,41 +92,57 @@ export async function onRequestGet(context) {
         .join(",");
 
       if (!sourceIds) {
+        // ソース一覧が空でも、API自体のカテゴリ取得をフォールバックとして試す。
+        const fallbackParams = new URLSearchParams({
+          country: "us",
+          category: safeCategory,
+          pageSize: "50",
+          page: "1"
+        });
+
+        const fallbackUrl =
+          `https://newsapi.org/v2/top-headlines?${fallbackParams.toString()}`;
+        const fallbackResponse = await newsApiFetch(fallbackUrl, apiKey);
+        const fallbackData = await readJsonResponse(fallbackResponse);
+
+        if (!fallbackResponse.ok || fallbackData.status === "error") {
+          return json(
+            {
+              status: "error",
+              code: fallbackData?.code || "headlines_error",
+              message:
+                fallbackData?.message ||
+                `News API returned HTTP ${fallbackResponse.status}`
+            },
+            fallbackResponse.status
+          );
+        }
+
         return json({
           status: "ok",
           totalResults: 0,
+          filteredResults: 0,
           articles: [],
           fetchedAt: new Date().toISOString(),
           endpoint: "top-headlines",
-          category: safeCategory
+          category: safeCategory,
+          language: "ja"
         });
       }
 
       const headlineParams = new URLSearchParams({
         sources: sourceIds,
-        pageSize: "50",
+        pageSize: "100",
         page: "1"
       });
 
       const headlinesUrl =
         `https://newsapi.org/v2/top-headlines?${headlineParams.toString()}`;
 
-      const headlinesResponse = await fetch(headlinesUrl, {
-        method: "GET",
-        headers: {
-          "X-Api-Key": apiKey,
-          "Accept": "application/json",
-          "User-Agent": "NewsLab-Experimental/1.0"
-        }
-      });
+      const headlinesResponse = await newsApiFetch(headlinesUrl, apiKey);
+      const headlinesData = await readJsonResponse(headlinesResponse);
 
-      const headlinesData =
-        await readJsonResponse(headlinesResponse);
-
-      if (
-        !headlinesResponse.ok ||
-        headlinesData.status === "error"
-      ) {
+      if (!headlinesResponse.ok || headlinesData.status === "error") {
         return json(
           {
             status: "error",
@@ -179,28 +155,31 @@ export async function onRequestGet(context) {
         );
       }
 
-      totalResults = Number(
-        headlinesData.totalResults || 0
-      );
-
+      totalResults = Number(headlinesData.totalResults || 0);
       endpoint = "top-headlines";
 
-      articles = filterJapaneseArticles(
-        Array.isArray(headlinesData.articles)
-          ? headlinesData.articles
-          : []
-      );
+      // ここでは country=jp の source をすでに指定しているため、
+      // 記事ごとの日本語文字比率フィルタはかけない。
+      // 英語タイトルを正しく取り逃さないことを優先する。
+      articles = Array.isArray(headlinesData.articles)
+        ? headlinesData.articles
+        : [];
 
       articles = deduplicateArticles(articles);
+
+      return json({
+        status: "ok",
+        totalResults,
+        filteredResults: Math.min(articles.length, pageSize),
+        articles: sortArticles(articles).slice(0, pageSize),
+        fetchedAt: new Date().toISOString(),
+        endpoint,
+        category: safeCategory,
+        language: "ja"
+      });
     }
 
-    articles = articles
-      .sort((a, b) => {
-        const aTime = Date.parse(a.publishedAt || "") || 0;
-        const bTime = Date.parse(b.publishedAt || "") || 0;
-        return bTime - aTime;
-      })
-      .slice(0, pageSize);
+    articles = sortArticles(articles).slice(0, pageSize);
 
     return json({
       status: "ok",
@@ -217,13 +196,45 @@ export async function onRequestGet(context) {
         status: "error",
         code: "fetch_failed",
         message:
-          error instanceof Error
-            ? error.message
-            : "Upstream fetch failed."
+          error instanceof Error ? error.message : "Upstream fetch failed."
       },
       502
     );
   }
+}
+
+async function fetchJapaneseSources(apiKey, category = "") {
+  const params = new URLSearchParams({ country: "jp" });
+
+  if (category) {
+    params.set("category", category);
+  }
+
+  const apiUrl =
+    `https://newsapi.org/v2/top-headlines/sources?${params.toString()}`;
+
+  const response = await newsApiFetch(apiUrl, apiKey);
+  const data = await readJsonResponse(response);
+
+  if (!response.ok || data.status === "error") {
+    throw new Error(
+      data?.message ||
+        `News API sources returned HTTP ${response.status}`
+    );
+  }
+
+  return Array.isArray(data.sources) ? data.sources : [];
+}
+
+async function newsApiFetch(apiUrl, apiKey) {
+  return fetch(apiUrl, {
+    method: "GET",
+    headers: {
+      "X-Api-Key": apiKey,
+      Accept: "application/json",
+      "User-Agent": "NewsLab-Experimental/1.0"
+    }
+  });
 }
 
 function filterJapaneseArticles(articles) {
@@ -240,56 +251,15 @@ function filterJapaneseArticles(articles) {
     }
 
     const text = `${title} ${description}`.trim();
-
     const japaneseCharacters =
-      (text.match(
+      text.match(
         /[\u3040-\u309F\u30A0-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]/g
-      ) || []).length;
+      ) || [];
+    const latinCharacters = text.match(/[A-Za-z]/g) || [];
 
-    const latinCharacters =
-      (text.match(/[A-Za-z]/g) || []).length;
-
-    const meaningfulCharacters =
-      japaneseCharacters + latinCharacters;
-
-    if (meaningfulCharacters === 0) {
-      return false;
-    }
-
-    const japaneseRatio =
-      japaneseCharacters / meaningfulCharacters;
-
-    const titleJapanese =
-      (
-        title.match(
-          /[\u3040-\u309F\u30A0-\u30FF\u3400-\u4DBF\uF900-\uFAFF]/g
-        ) || []
-      ).length;
-
-    const titleLatin =
-      (title.match(/[A-Za-z]/g) || []).length;
-
-    if (
-      titleLatin >= 8 &&
-      titleJapanese === 0
-    ) {
-      return false;
-    }
-
-    if (
-      japaneseRatio < 0.12 &&
-      titleJapanese < 2
-    ) {
-      return false;
-    }
-
-    const forbiddenOnlyPattern =
-      /^[A-Za-z0-9\s\-_:.,!?'"()[\]\/&+]+$/;
-
-    if (
-      title.length >= 8 &&
-      forbiddenOnlyPattern.test(title)
-    ) {
+    // 検索結果では、日本語文字が一切ない英語記事だけ除外する。
+    // 「AI」「NHK」「Apple」など英字を含む日本語記事は残す。
+    if (japaneseCharacters.length === 0 && latinCharacters.length >= 8) {
       return false;
     }
 
@@ -307,8 +277,7 @@ function deduplicateArticles(articles) {
       .replace(/\s+/g, " ");
 
     const key =
-      url ||
-      `${title}|${cleanText(article.source?.name)}`;
+      url || `${title}|${cleanText(article.source?.name)}`;
 
     if (!key || seen.has(key)) {
       return false;
@@ -319,14 +288,20 @@ function deduplicateArticles(articles) {
   });
 }
 
+function sortArticles(articles) {
+  return [...articles].sort((a, b) => {
+    const aTime = Date.parse(a.publishedAt || "") || 0;
+    const bTime = Date.parse(b.publishedAt || "") || 0;
+    return bTime - aTime;
+  });
+}
+
 function cleanText(value) {
   if (typeof value !== "string") {
     return "";
   }
 
-  return value
-    .replace(/\s+/g, " ")
-    .trim();
+  return value.replace(/\s+/g, " ").trim();
 }
 
 async function readJsonResponse(response) {
@@ -338,8 +313,7 @@ async function readJsonResponse(response) {
     return {
       status: "error",
       code: "invalid_json",
-      message:
-        "News API からJSON以外のレスポンスが返りました。"
+      message: "News API からJSON以外のレスポンスが返りました。"
     };
   }
 }
@@ -351,22 +325,15 @@ function clampInt(value, fallback, min, max) {
     return fallback;
   }
 
-  return Math.max(
-    min,
-    Math.min(max, number)
-  );
+  return Math.max(min, Math.min(max, number));
 }
 
 function json(data, status = 200) {
-  return new Response(
-    JSON.stringify(data),
-    {
-      status,
-      headers: {
-        "content-type":
-          "application/json; charset=UTF-8",
-        "cache-control": "no-store"
-      }
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: {
+      "content-type": "application/json; charset=UTF-8",
+      "cache-control": "no-store"
     }
-  );
+  });
 }
