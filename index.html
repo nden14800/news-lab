@@ -500,7 +500,7 @@
       <section class="content-panel">
         <div class="section-head">
           <h2 class="section-title" id="sectionTitle">最新ヘッドライン</h2>
-          <span class="result-meta" id="resultMeta">—</span>
+          <span class="result-meta" id="resultMeta">日本語記事のみ · —</span>
         </div>
 
         <div id="featuredWrap" class="featured"></div>
@@ -688,7 +688,7 @@
         state.articles = clean;
         els.countValue.textContent = `${clean.length} 件`;
         els.updatedValue.textContent = formatDate(new Date().toISOString());
-        els.resultMeta.textContent = `${clean.length} 件を表示`;
+        els.resultMeta.textContent = `日本語記事のみ · ${clean.length} 件を表示`;
 
         if (!clean.length) {
           els.featuredWrap.innerHTML = '';
@@ -696,7 +696,7 @@
             <div class="empty">
               <i class="bi bi-newspaper"></i>
               <strong>ニュースが見つかりませんでした</strong>
-              <span>別のキーワードまたはカテゴリを試してください。</span>
+              <span>日本語の記事が見つかりませんでした。別のキーワードまたはカテゴリを試してください。</span>
             </div>
           `;
           return;
