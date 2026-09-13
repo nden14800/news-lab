@@ -1,0 +1,838 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#f7f8fa" />
+  <meta name="description" content="NewsLab — ニュースAPIを利用した実験的ニュースプラットフォーム" />
+  <title>NewsLab — Experimental News Platform</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css" />
+
+  <style>
+    :root {
+      --bg: #f7f8fa;
+      --surface: #ffffff;
+      --surface-2: #f1f3f5;
+      --text: #111318;
+      --muted: #6b7280;
+      --muted-2: #9299a5;
+      --line: #e6e8ec;
+      --line-strong: #d9dde4;
+      --accent: #111827;
+      --accent-2: #2563eb;
+      --success: #15803d;
+      --danger: #c2410c;
+      --radius: 18px;
+      --radius-sm: 12px;
+      --shadow: 0 8px 30px rgba(17, 24, 39, .05);
+      --max: 1320px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, "Noto Sans JP", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+    a { color: inherit; text-decoration: none; }
+    button, input { font: inherit; }
+    button { cursor: pointer; }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      backdrop-filter: blur(18px);
+      background: rgba(247,248,250,.86);
+      border-bottom: 1px solid rgba(230,232,236,.85);
+    }
+    .nav {
+      width: min(var(--max), calc(100% - 40px));
+      min-height: 72px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 11px;
+      flex: 0 0 auto;
+    }
+    .brand-mark {
+      width: 35px;
+      height: 35px;
+      display: grid;
+      place-items: center;
+      border-radius: 11px;
+      background: #111827;
+      color: #fff;
+      font-size: 16px;
+    }
+    .brand-copy { line-height: 1.05; }
+    .brand-name { font-size: 17px; font-weight: 800; letter-spacing: -.02em; }
+    .brand-label {
+      margin-top: 4px;
+      display: inline-block;
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: .12em;
+      color: var(--muted-2);
+    }
+    .nav-search {
+      flex: 1 1 auto;
+      max-width: 580px;
+      margin-left: auto;
+      position: relative;
+    }
+    .nav-search input {
+      width: 100%;
+      height: 43px;
+      border: 1px solid var(--line);
+      background: var(--surface);
+      border-radius: 12px;
+      outline: 0;
+      padding: 0 88px 0 40px;
+      color: var(--text);
+      transition: border-color .18s ease, box-shadow .18s ease;
+    }
+    .nav-search input:focus {
+      border-color: #bfc5cf;
+      box-shadow: 0 0 0 4px rgba(17,24,39,.05);
+    }
+    .nav-search > i {
+      position: absolute;
+      left: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--muted);
+    }
+    .search-action {
+      position: absolute;
+      right: 6px;
+      top: 6px;
+      height: 31px;
+      padding: 0 11px;
+      border: 0;
+      border-radius: 8px;
+      background: #111827;
+      color: white;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .status-pill {
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      height: 38px;
+      padding: 0 12px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--surface);
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--muted);
+    }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--muted-2);
+    }
+    .status-pill.ok { color: var(--success); }
+    .status-pill.ok .status-dot { background: #22c55e; }
+    .status-pill.error { color: var(--danger); }
+    .status-pill.error .status-dot { background: #f97316; }
+
+    main {
+      width: min(var(--max), calc(100% - 40px));
+      margin: 0 auto;
+      padding: 36px 0 60px;
+    }
+    .hero {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 28px;
+      margin-bottom: 24px;
+    }
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+    .eyebrow i { font-size: 12px; }
+    h1 {
+      margin: 0;
+      font-size: clamp(30px, 4vw, 48px);
+      line-height: 1.05;
+      letter-spacing: -.045em;
+    }
+    .hero-desc {
+      margin: 12px 0 0;
+      max-width: 710px;
+      color: var(--muted);
+      line-height: 1.75;
+      font-size: 14px;
+    }
+    .hero-actions {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      flex: 0 0 auto;
+    }
+    .button {
+      height: 42px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 0 14px;
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      background: var(--surface);
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 700;
+      transition: transform .15s ease, background .15s ease, border-color .15s ease;
+    }
+    .button:hover { transform: translateY(-1px); border-color: var(--line-strong); background: #fbfbfc; }
+    .button.primary { background: #111827; color: #fff; border-color: #111827; }
+    .button.primary:hover { background: #1f2937; }
+
+    .notice {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      border: 1px solid #e5e7eb;
+      border-radius: 14px;
+      background: #fbfbfc;
+      padding: 14px 16px;
+      margin-bottom: 20px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.65;
+    }
+    .notice i { color: var(--accent-2); font-size: 15px; margin-top: 2px; }
+    .notice strong { color: var(--text); }
+
+    .tabs {
+      display: flex;
+      gap: 7px;
+      overflow-x: auto;
+      padding-bottom: 5px;
+      scrollbar-width: none;
+      margin-bottom: 22px;
+    }
+    .tabs::-webkit-scrollbar { display: none; }
+    .tab {
+      flex: 0 0 auto;
+      height: 36px;
+      padding: 0 13px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      transition: .15s ease;
+    }
+    .tab.active { background: #111827; border-color: #111827; color: white; }
+    .tab:hover:not(.active) { border-color: var(--line-strong); color: var(--text); }
+
+    .layout { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 22px; }
+    .content-panel { min-width: 0; }
+    .section-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 15px;
+      margin: 0 0 13px;
+    }
+    .section-title {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 800;
+      letter-spacing: -.02em;
+    }
+    .result-meta { color: var(--muted-2); font-size: 11px; }
+
+    .featured {
+      display: grid;
+      grid-template-columns: minmax(0, 1.35fr) minmax(280px, .65fr);
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    .feature-card, .news-card, .side-card {
+      border: 1px solid var(--line);
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+    .feature-card {
+      display: grid;
+      grid-template-columns: 1.05fr .95fr;
+      min-height: 310px;
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .feature-image {
+      min-height: 100%;
+      background: var(--surface-2);
+      overflow: hidden;
+      position: relative;
+    }
+    .feature-image img, .news-image img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .feature-image .image-placeholder, .news-image .image-placeholder {
+      width: 100%; height: 100%; display: grid; place-items: center; color: #a0a6af;
+      font-size: 26px;
+    }
+    .feature-body { padding: 26px; display: flex; flex-direction: column; }
+    .tag {
+      display: inline-flex; align-items: center; gap: 6px;
+      color: var(--accent-2); font-size: 10px; font-weight: 800; letter-spacing: .04em;
+      text-transform: uppercase; margin-bottom: 10px;
+    }
+    .feature-title { font-size: 23px; line-height: 1.28; letter-spacing: -.03em; margin: 0; }
+    .feature-desc { color: var(--muted); line-height: 1.65; font-size: 12px; margin: 12px 0 0; }
+    .article-meta { margin-top: auto; padding-top: 18px; display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--muted-2); font-size: 10px; }
+    .source { font-weight: 700; color: #717784; }
+    .feature-side { display: grid; grid-template-rows: 1fr 1fr; gap: 16px; }
+    .mini-card {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: var(--shadow);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-height: 147px;
+    }
+    .mini-card h3 { margin: 0; font-size: 15px; line-height: 1.4; letter-spacing: -.015em; }
+    .mini-card p { margin: 8px 0 0; font-size: 11px; color: var(--muted); line-height: 1.6; }
+
+    .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+    .news-card { border-radius: 16px; overflow: hidden; min-width: 0; transition: transform .17s ease, border-color .17s ease; }
+    .news-card:hover { transform: translateY(-2px); border-color: var(--line-strong); }
+    .news-image { aspect-ratio: 16/9; background: var(--surface-2); overflow: hidden; }
+    .news-body { padding: 16px; }
+    .news-title { margin: 0; font-size: 14px; line-height: 1.48; letter-spacing: -.015em; }
+    .news-desc { margin: 9px 0 0; color: var(--muted); font-size: 11px; line-height: 1.65; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
+    .news-bottom { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 14px; font-size: 10px; color: var(--muted-2); }
+    .open-icon { width: 29px; height: 29px; border: 1px solid var(--line); border-radius: 9px; display: grid; place-items: center; color: var(--muted); }
+
+    .sidebar { min-width: 0; }
+    .side-card { border-radius: 16px; padding: 17px; margin-bottom: 14px; box-shadow: none; }
+    .side-card h2 { margin: 0 0 14px; font-size: 12px; font-weight: 800; letter-spacing: -.01em; }
+    .metric { display: flex; justify-content: space-between; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); font-size: 11px; }
+    .metric:first-of-type { border-top: 0; padding-top: 0; }
+    .metric .label { color: var(--muted); }
+    .metric .value { font-weight: 800; }
+    .experimental {
+      border-color: #dfe3ea;
+      background: linear-gradient(180deg, #fff, #fafbfc);
+    }
+    .experimental-title { display: flex; gap: 9px; align-items: center; font-size: 12px; font-weight: 800; }
+    .experimental-title .pulse { width: 8px; height: 8px; border-radius: 50%; background: #111827; box-shadow: 0 0 0 5px rgba(17,24,39,.06); }
+    .side-copy { color: var(--muted); font-size: 11px; line-height: 1.7; margin: 10px 0 0; }
+
+    .empty, .error-box, .loading-box {
+      border: 1px dashed var(--line-strong);
+      border-radius: 16px;
+      background: var(--surface);
+      padding: 36px 20px;
+      text-align: center;
+      color: var(--muted);
+      grid-column: 1 / -1;
+    }
+    .empty i, .error-box i, .loading-box i { display: block; font-size: 24px; margin-bottom: 9px; color: #9ca3af; }
+    .empty strong, .error-box strong, .loading-box strong { display: block; color: var(--text); margin-bottom: 4px; font-size: 13px; }
+    .empty span, .error-box span, .loading-box span { font-size: 11px; }
+
+    .skeleton { position: relative; overflow: hidden; background: #eef0f3; }
+    .skeleton::after { content: ""; position: absolute; inset: 0; transform: translateX(-100%); background: linear-gradient(90deg, transparent, rgba(255,255,255,.7), transparent); animation: shine 1.15s infinite; }
+    @keyframes shine { to { transform: translateX(100%); } }
+    .skeleton-card { border: 1px solid var(--line); border-radius: 16px; overflow: hidden; background: var(--surface); }
+    .skeleton-media { aspect-ratio: 16/9; }
+    .skeleton-lines { padding: 16px; }
+    .skeleton-line { height: 10px; border-radius: 999px; margin-bottom: 9px; }
+    .skeleton-line.short { width: 58%; }
+
+    .footer {
+      margin-top: 38px;
+      padding-top: 20px;
+      border-top: 1px solid var(--line);
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 20px;
+      color: var(--muted-2);
+      font-size: 10px;
+      line-height: 1.6;
+    }
+    .footer strong { color: #66707d; }
+
+    .toast {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      z-index: 100;
+      max-width: 360px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: #111827;
+      color: #fff;
+      box-shadow: 0 14px 35px rgba(17,24,39,.18);
+      font-size: 12px;
+      opacity: 0;
+      transform: translateY(8px);
+      pointer-events: none;
+      transition: .2s ease;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+
+    @media (max-width: 1120px) {
+      .layout { grid-template-columns: 1fr; }
+      .sidebar { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 14px; }
+      .side-card { margin-bottom: 0; }
+    }
+    @media (max-width: 900px) {
+      .nav-search { max-width: none; }
+      .status-pill { display: none; }
+      .hero { align-items: flex-start; flex-direction: column; }
+      .hero-actions { width: 100%; }
+      .featured { grid-template-columns: 1fr; }
+      .feature-side { grid-template-columns: 1fr 1fr; grid-template-rows: none; }
+      .grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+    }
+    @media (max-width: 640px) {
+      .nav, main { width: min(100% - 24px, var(--max)); }
+      .nav { min-height: 64px; gap: 10px; }
+      .brand-label { display: none; }
+      .brand-name { font-size: 15px; }
+      .brand-mark { width: 32px; height: 32px; }
+      .nav-search input { height: 40px; padding-left: 36px; padding-right: 76px; }
+      .search-action { height: 28px; padding: 0 9px; }
+      main { padding-top: 25px; }
+      h1 { font-size: 32px; }
+      .hero-desc { font-size: 13px; }
+      .feature-card { grid-template-columns: 1fr; }
+      .feature-image { aspect-ratio: 16/9; min-height: 0; }
+      .feature-body { padding: 20px; min-height: 250px; }
+      .feature-title { font-size: 20px; }
+      .feature-side { grid-template-columns: 1fr; }
+      .grid { grid-template-columns: 1fr; }
+      .sidebar { display: block; }
+      .side-card { margin-bottom: 12px; }
+      .footer { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <nav class="nav" aria-label="メインナビゲーション">
+      <a class="brand" href="#" aria-label="NewsLab ホーム">
+        <span class="brand-mark"><i class="bi bi-newspaper"></i></span>
+        <span class="brand-copy">
+          <span class="brand-name">NewsLab</span>
+          <span class="brand-label">EXPERIMENTAL</span>
+        </span>
+      </a>
+
+      <form class="nav-search" id="searchForm">
+        <i class="bi bi-search" aria-hidden="true"></i>
+        <input id="searchInput" type="search" autocomplete="off" placeholder="ニュースを検索…" aria-label="ニュースを検索" />
+        <button class="search-action" type="submit">検索</button>
+      </form>
+
+      <div class="status-pill" id="statusPill" title="API接続状態">
+        <span class="status-dot"></span>
+        <span id="statusText">待機中</span>
+      </div>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div>
+        <div class="eyebrow"><i class="bi bi-broadcast"></i> News intelligence / experimental</div>
+        <h1 id="pageTitle">今日のニュース</h1>
+        <p class="hero-desc">ニュースAPIから取得した記事を、ひとつの読みやすいインターフェースにまとめます。NewsLabはニュース取得・検索・表示のための実験的なプロジェクトです。</p>
+      </div>
+      <div class="hero-actions">
+        <button class="button" id="refreshButton"><i class="bi bi-arrow-clockwise"></i><span>再取得</span></button>
+        <button class="button" id="resetButton"><i class="bi bi-house"></i><span>トップ</span></button>
+      </div>
+    </section>
+
+    <div class="notice">
+      <i class="bi bi-info-circle"></i>
+      <div><strong>Experimental service.</strong> このサイトはNews APIを利用した実験用ニュースUIです。掲載記事そのものは各ニュース提供元に帰属し、詳細は元記事をご確認ください。</div>
+    </div>
+
+    <div class="tabs" id="categoryTabs" role="tablist" aria-label="ニュースカテゴリ">
+      <button class="tab active" data-category="general" role="tab">総合</button>
+      <button class="tab" data-category="technology" role="tab">テクノロジー</button>
+      <button class="tab" data-category="business" role="tab">ビジネス</button>
+      <button class="tab" data-category="science" role="tab">科学</button>
+      <button class="tab" data-category="health" role="tab">ヘルス</button>
+      <button class="tab" data-category="sports" role="tab">スポーツ</button>
+      <button class="tab" data-category="entertainment" role="tab">エンタメ</button>
+    </div>
+
+    <div class="layout">
+      <section class="content-panel">
+        <div class="section-head">
+          <h2 class="section-title" id="sectionTitle">最新ヘッドライン</h2>
+          <span class="result-meta" id="resultMeta">—</span>
+        </div>
+
+        <div id="featuredWrap" class="featured"></div>
+        <div id="newsGrid" class="grid"></div>
+      </section>
+
+      <aside class="sidebar" aria-label="サービス情報">
+        <div class="side-card">
+          <h2>APIステータス</h2>
+          <div class="metric"><span class="label">Provider</span><span class="value">News API</span></div>
+          <div class="metric"><span class="label">Endpoint</span><span class="value" id="endpointValue">—</span></div>
+          <div class="metric"><span class="label">取得件数</span><span class="value" id="countValue">—</span></div>
+          <div class="metric"><span class="label">最終更新</span><span class="value" id="updatedValue">—</span></div>
+        </div>
+
+        <div class="side-card experimental">
+          <div class="experimental-title"><span class="pulse"></span>Experimental Mode</div>
+          <p class="side-copy">APIの動作、ニュース検索、カードレイアウト、レスポンシブUIなどを検証するための実験環境です。</p>
+        </div>
+
+        <div class="side-card">
+          <h2>使い方</h2>
+          <p class="side-copy" style="margin-top:0">カテゴリを切り替えるか、上部の検索欄からキーワードを入力してください。記事カードから元サイトへ移動できます。</p>
+        </div>
+      </aside>
+    </div>
+
+    <footer class="footer">
+      <div><strong>NewsLab</strong> — Experimental News Platform</div>
+      <div>Frontend: single-file HTML / Data: News API / Icons: Bootstrap Icons 1.13.1</div>
+    </footer>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    (() => {
+      'use strict';
+
+      const state = {
+        category: 'general',
+        query: '',
+        loading: false,
+        articles: [],
+        lastEndpoint: 'top-headlines'
+      };
+
+      const els = {
+        searchForm: document.getElementById('searchForm'),
+        searchInput: document.getElementById('searchInput'),
+        refreshButton: document.getElementById('refreshButton'),
+        resetButton: document.getElementById('resetButton'),
+        tabs: [...document.querySelectorAll('.tab')],
+        pageTitle: document.getElementById('pageTitle'),
+        sectionTitle: document.getElementById('sectionTitle'),
+        resultMeta: document.getElementById('resultMeta'),
+        featuredWrap: document.getElementById('featuredWrap'),
+        newsGrid: document.getElementById('newsGrid'),
+        statusPill: document.getElementById('statusPill'),
+        statusText: document.getElementById('statusText'),
+        endpointValue: document.getElementById('endpointValue'),
+        countValue: document.getElementById('countValue'),
+        updatedValue: document.getElementById('updatedValue'),
+        toast: document.getElementById('toast')
+      };
+
+      let toastTimer = null;
+
+      function escapeHtml(value) {
+        return String(value ?? '')
+          .replaceAll('&', '&amp;')
+          .replaceAll('<', '&lt;')
+          .replaceAll('>', '&gt;')
+          .replaceAll('"', '&quot;')
+          .replaceAll("'", '&#039;');
+      }
+
+      function safeUrl(value) {
+        try {
+          const url = new URL(value);
+          return ['http:', 'https:'].includes(url.protocol) ? url.href : '#';
+        } catch {
+          return '#';
+        }
+      }
+
+      function truncate(value, length) {
+        const text = String(value ?? '').trim();
+        return text.length > length ? text.slice(0, length).trimEnd() + '…' : text;
+      }
+
+      function formatDate(value) {
+        if (!value) return '—';
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return '—';
+        return new Intl.DateTimeFormat('ja-JP', {
+          year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+        }).format(date);
+      }
+
+      function relativeTime(value) {
+        if (!value) return '';
+        const date = new Date(value);
+        const diff = Date.now() - date.getTime();
+        if (!Number.isFinite(diff)) return '';
+        const min = Math.floor(diff / 60000);
+        if (min < 1) return 'たった今';
+        if (min < 60) return `${min}分前`;
+        const hours = Math.floor(min / 60);
+        if (hours < 24) return `${hours}時間前`;
+        const days = Math.floor(hours / 24);
+        if (days < 7) return `${days}日前`;
+        return formatDate(value);
+      }
+
+      function showToast(message) {
+        clearTimeout(toastTimer);
+        els.toast.textContent = message;
+        els.toast.classList.add('show');
+        toastTimer = setTimeout(() => els.toast.classList.remove('show'), 2800);
+      }
+
+      function setStatus(kind, text) {
+        els.statusPill.classList.remove('ok', 'error');
+        if (kind) els.statusPill.classList.add(kind);
+        els.statusText.textContent = text;
+      }
+
+      function setLoading(on) {
+        state.loading = on;
+        els.refreshButton.disabled = on;
+        els.refreshButton.innerHTML = on
+          ? '<i class="bi bi-arrow-repeat"></i><span>取得中…</span>'
+          : '<i class="bi bi-arrow-clockwise"></i><span>再取得</span>';
+
+        if (on) {
+          const skeleton = Array.from({ length: 6 }, () => `
+            <article class="skeleton-card">
+              <div class="skeleton skeleton-media"></div>
+              <div class="skeleton-lines">
+                <div class="skeleton skeleton-line"></div>
+                <div class="skeleton skeleton-line"></div>
+                <div class="skeleton skeleton-line short"></div>
+              </div>
+            </article>
+          `).join('');
+          els.featuredWrap.innerHTML = '';
+          els.newsGrid.innerHTML = skeleton;
+        }
+      }
+
+      function imageMarkup(url, alt) {
+        if (!url) return '<div class="image-placeholder"><i class="bi bi-image"></i></div>';
+        const safe = safeUrl(url);
+        if (safe === '#') return '<div class="image-placeholder"><i class="bi bi-image"></i></div>';
+        return `<img loading="lazy" src="${escapeHtml(safe)}" alt="${escapeHtml(alt || '')}" referrerpolicy="no-referrer" onerror="this.parentElement.innerHTML='<div class=\'image-placeholder\'><i class=\'bi bi-image\'></i></div>'">`;
+      }
+
+      function articleCard(article) {
+        const source = article?.source?.name || 'Unknown source';
+        const title = truncate(article?.title || 'Untitled', 140);
+        const description = truncate(article?.description || 'この記事の概要は提供元サイトでご確認ください。', 190);
+        const url = safeUrl(article?.url);
+        const canOpen = url !== '#';
+        return `
+          <article class="news-card">
+            <a href="${canOpen ? escapeHtml(url) : '#'}" ${canOpen ? 'target="_blank" rel="noopener noreferrer"' : ''} aria-label="${escapeHtml(title)}">
+              <div class="news-image">${imageMarkup(article?.urlToImage, title)}</div>
+              <div class="news-body">
+                <div class="tag"><i class="bi bi-dot"></i>${escapeHtml(source)}</div>
+                <h3 class="news-title">${escapeHtml(title)}</h3>
+                <p class="news-desc">${escapeHtml(description)}</p>
+                <div class="news-bottom">
+                  <span>${escapeHtml(relativeTime(article?.publishedAt))}</span>
+                  <span class="open-icon"><i class="bi bi-box-arrow-up-right"></i></span>
+                </div>
+              </div>
+            </a>
+          </article>
+        `;
+      }
+
+      function renderArticles(articles) {
+        const clean = (Array.isArray(articles) ? articles : []).filter(Boolean);
+        state.articles = clean;
+        els.countValue.textContent = `${clean.length} 件`;
+        els.updatedValue.textContent = formatDate(new Date().toISOString());
+        els.resultMeta.textContent = `${clean.length} 件を表示`;
+
+        if (!clean.length) {
+          els.featuredWrap.innerHTML = '';
+          els.newsGrid.innerHTML = `
+            <div class="empty">
+              <i class="bi bi-newspaper"></i>
+              <strong>ニュースが見つかりませんでした</strong>
+              <span>別のキーワードまたはカテゴリを試してください。</span>
+            </div>
+          `;
+          return;
+        }
+
+        const featured = clean[0];
+        const side1 = clean[1];
+        const side2 = clean[2];
+        const mainUrl = safeUrl(featured.url);
+        els.featuredWrap.innerHTML = `
+          <article class="feature-card">
+            <a class="feature-image" href="${mainUrl !== '#' ? escapeHtml(mainUrl) : '#'}" ${mainUrl !== '#' ? 'target="_blank" rel="noopener noreferrer"' : ''}>
+              ${imageMarkup(featured.urlToImage, featured.title)}
+            </a>
+            <div class="feature-body">
+              <div class="tag"><i class="bi bi-stars"></i> Top story</div>
+              <h2 class="feature-title">${escapeHtml(truncate(featured.title || 'Untitled', 150))}</h2>
+              <p class="feature-desc">${escapeHtml(truncate(featured.description || 'この記事の概要は提供元サイトでご確認ください。', 260))}</p>
+              <div class="article-meta">
+                <span class="source">${escapeHtml(featured.source?.name || 'Unknown source')}</span>
+                <span>${escapeHtml(relativeTime(featured.publishedAt))}</span>
+              </div>
+            </div>
+          </article>
+          <div class="feature-side">
+            ${[side1, side2].filter(Boolean).map(article => `
+              <a class="mini-card" href="${safeUrl(article.url) !== '#' ? escapeHtml(safeUrl(article.url)) : '#'}" ${safeUrl(article.url) !== '#' ? 'target="_blank" rel="noopener noreferrer"' : ''}>
+                <div>
+                  <div class="tag"><i class="bi bi-bookmark"></i>${escapeHtml(article.source?.name || 'News')}</div>
+                  <h3>${escapeHtml(truncate(article.title || 'Untitled', 105))}</h3>
+                  <p>${escapeHtml(truncate(article.description || '', 120))}</p>
+                </div>
+                <div class="article-meta"><span>${escapeHtml(relativeTime(article.publishedAt))}</span><i class="bi bi-arrow-up-right"></i></div>
+              </a>
+            `).join('')}
+          </div>
+        `;
+
+        els.newsGrid.innerHTML = clean.slice(3).map(articleCard).join('');
+      }
+
+      function renderError(message) {
+        els.featuredWrap.innerHTML = '';
+        els.newsGrid.innerHTML = `
+          <div class="error-box">
+            <i class="bi bi-exclamation-circle"></i>
+            <strong>ニュースを取得できませんでした</strong>
+            <span>${escapeHtml(message || 'APIまたはネットワークを確認してください。')}</span>
+          </div>
+        `;
+        els.countValue.textContent = '—';
+        els.resultMeta.textContent = '取得エラー';
+      }
+
+      async function fetchNews() {
+        if (state.loading) return;
+        setLoading(true);
+        setStatus('', '取得中…');
+
+        const params = new URLSearchParams();
+        let endpoint = '/api/news?';
+
+        if (state.query.trim()) {
+          params.set('q', state.query.trim());
+          state.lastEndpoint = 'everything';
+        } else {
+          params.set('category', state.category);
+          state.lastEndpoint = 'top-headlines';
+        }
+        params.set('pageSize', '18');
+
+        try {
+          const response = await fetch(endpoint + params.toString(), {
+            method: 'GET',
+            headers: { 'Accept': 'application/json' },
+            cache: 'no-store'
+          });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok || data.status === 'error') {
+            throw new Error(data.message || `HTTP ${response.status}`);
+          }
+          renderArticles(data.articles || []);
+          setStatus('ok', 'API接続中');
+          els.endpointValue.textContent = state.lastEndpoint;
+          showToast(`${data.articles?.length || 0}件の記事を取得しました`);
+        } catch (error) {
+          console.error(error);
+          setStatus('error', 'APIエラー');
+          els.endpointValue.textContent = state.lastEndpoint;
+          renderError(error?.message || '不明なエラーが発生しました。');
+        } finally {
+          setLoading(false);
+        }
+      }
+
+      function setCategory(category) {
+        state.category = category;
+        state.query = '';
+        els.searchInput.value = '';
+        els.tabs.forEach(tab => tab.classList.toggle('active', tab.dataset.category === category));
+        const labels = {
+          general: ['今日のニュース', '最新ヘッドライン'],
+          technology: ['テクノロジー', 'テクノロジーの最新記事'],
+          business: ['ビジネス', 'ビジネスの最新記事'],
+          science: ['科学', '科学の最新記事'],
+          health: ['ヘルス', 'ヘルスの最新記事'],
+          sports: ['スポーツ', 'スポーツの最新記事'],
+          entertainment: ['エンタメ', 'エンタメの最新記事']
+        };
+        const [title, section] = labels[category] || labels.general;
+        els.pageTitle.textContent = title;
+        els.sectionTitle.textContent = section;
+        fetchNews();
+      }
+
+      els.tabs.forEach(tab => tab.addEventListener('click', () => setCategory(tab.dataset.category)));
+
+      els.searchForm.addEventListener('submit', event => {
+        event.preventDefault();
+        const query = els.searchInput.value.trim();
+        if (!query) {
+          showToast('検索キーワードを入力してください');
+          return;
+        }
+        state.query = query;
+        els.tabs.forEach(tab => tab.classList.remove('active'));
+        els.pageTitle.textContent = `「${query}」のニュース`;
+        els.sectionTitle.textContent = '検索結果';
+        fetchNews();
+      });
+
+      els.refreshButton.addEventListener('click', fetchNews);
+      els.resetButton.addEventListener('click', () => setCategory('general'));
+
+      fetchNews();
+    })();
+  </script>
+</body>
+</html>
