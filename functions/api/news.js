@@ -26,22 +26,21 @@ export async function onRequestGet(context) {
   const safeCategory = categories.has(category) ? category : "general";
 
   try {
-    let endpoint;
     let params;
+    let endpoint;
 
     if (q) {
       params = new URLSearchParams({
         q,
         sortBy: "publishedAt",
-        pageSize: String(Math.min(100, Math.max(20, pageSize * 3))),
+        pageSize: "50",
         page: "1"
       });
       endpoint = "everything";
     } else {
       params = new URLSearchParams({
-        country: "us",
         category: safeCategory,
-        pageSize: String(Math.min(100, Math.max(20, pageSize))),
+        pageSize: "100",
         page: "1"
       });
       endpoint = "top-headlines";
@@ -57,18 +56,17 @@ export async function onRequestGet(context) {
       return json({
         status: "error",
         code: data?.code || "upstream_error",
-        message: data?.message || `News API returned HTTP ${response.status}`
+        message:
+          data?.message ||
+          `News API returned HTTP ${response.status}`
       }, response.status);
     }
 
-    let articles = Array.isArray(data.articles) ? data.articles : [];
+    let articles = Array.isArray(data.articles)
+      ? data.articles
+      : [];
 
-    if (q) {
-      articles = deduplicateArticles(articles);
-    } else {
-      articles = deduplicateArticles(articles);
-    }
-
+    articles = deduplicateArticles(articles);
     articles = sortArticles(articles).slice(0, pageSize);
 
     return json({
@@ -78,15 +76,16 @@ export async function onRequestGet(context) {
       articles,
       fetchedAt: new Date().toISOString(),
       endpoint,
-      category: safeCategory,
-      language: q ? "any" : "en",
-      country: "us"
+      category: safeCategory
     });
   } catch (error) {
     return json({
       status: "error",
       code: "fetch_failed",
-      message: error instanceof Error ? error.message : "Upstream fetch failed."
+      message:
+        error instanceof Error
+          ? error.message
+          : "Upstream fetch failed."
     }, 502);
   }
 }
@@ -106,15 +105,16 @@ function deduplicateArticles(articles) {
   const seen = new Set();
 
   return articles.filter((article) => {
-    if (!article || typeof article !== "object") return false;
-
-    const url = cleanText(article.url);
-    const title = cleanText(article.title)
+    const url = cleanText(article?.url);
+    const title = cleanText(article?.title)
       .toLowerCase()
       .replace(/\s+/g, " ");
-    const key = url || `${title}|${cleanText(article.source?.name)}`;
 
-    if (!key || seen.has(key)) return false;
+    const key = url || `${title}|${cleanText(article?.source?.name)}`;
+
+    if (!key || seen.has(key)) {
+      return false;
+    }
 
     seen.add(key);
     return true;
@@ -130,7 +130,9 @@ function sortArticles(articles) {
 }
 
 function cleanText(value) {
-  return typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "";
+  return typeof value === "string"
+    ? value.replace(/\s+/g, " ").trim()
+    : "";
 }
 
 async function readJsonResponse(response) {
@@ -150,7 +152,9 @@ async function readJsonResponse(response) {
 function clampInt(value, fallback, min, max) {
   const number = Number.parseInt(value || "", 10);
 
-  if (!Number.isFinite(number)) return fallback;
+  if (!Number.isFinite(number)) {
+    return fallback;
+  }
 
   return Math.max(min, Math.min(max, number));
 }
