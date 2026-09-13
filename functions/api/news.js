@@ -25,8 +25,6 @@ export async function onRequestGet(context) {
     let endpoint = "";
 
     if (q) {
-      // News API の everything には現在 Japanese (ja) の language filter がないため、
-      // 日本向けソースを取得してから検索対象を限定する。
       const jpSources = await fetchJapaneseSources(apiKey);
       const sourceIds = jpSources
         .map((source) => source?.id)
@@ -46,7 +44,6 @@ export async function onRequestGet(context) {
       }
 
       const apiUrl = `https://newsapi.org/v2/everything?${params.toString()}`;
-
       const response = await newsApiFetch(apiUrl, apiKey);
       const data = await readJsonResponse(response);
 
@@ -65,7 +62,6 @@ export async function onRequestGet(context) {
 
       totalResults = Number(data.totalResults || 0);
       endpoint = "everything";
-
       articles = filterJapaneseArticles(
         Array.isArray(data.articles) ? data.articles : []
       );
@@ -92,32 +88,6 @@ export async function onRequestGet(context) {
         .join(",");
 
       if (!sourceIds) {
-        // ソース一覧が空でも、API自体のカテゴリ取得をフォールバックとして試す。
-        const fallbackParams = new URLSearchParams({
-          country: "us",
-          category: safeCategory,
-          pageSize: "50",
-          page: "1"
-        });
-
-        const fallbackUrl =
-          `https://newsapi.org/v2/top-headlines?${fallbackParams.toString()}`;
-        const fallbackResponse = await newsApiFetch(fallbackUrl, apiKey);
-        const fallbackData = await readJsonResponse(fallbackResponse);
-
-        if (!fallbackResponse.ok || fallbackData.status === "error") {
-          return json(
-            {
-              status: "error",
-              code: fallbackData?.code || "headlines_error",
-              message:
-                fallbackData?.message ||
-                `News API returned HTTP ${fallbackResponse.status}`
-            },
-            fallbackResponse.status
-          );
-        }
-
         return json({
           status: "ok",
           totalResults: 0,
@@ -138,7 +108,6 @@ export async function onRequestGet(context) {
 
       const headlinesUrl =
         `https://newsapi.org/v2/top-headlines?${headlineParams.toString()}`;
-
       const headlinesResponse = await newsApiFetch(headlinesUrl, apiKey);
       const headlinesData = await readJsonResponse(headlinesResponse);
 
@@ -158,9 +127,8 @@ export async function onRequestGet(context) {
       totalResults = Number(headlinesData.totalResults || 0);
       endpoint = "top-headlines";
 
-      // ここでは country=jp の source をすでに指定しているため、
-      // 記事ごとの日本語文字比率フィルタはかけない。
-      // 英語タイトルを正しく取り逃さないことを優先する。
+      // country=jp の source を指定済みなので、カテゴリ取得では
+      // 記事本文の文字比率フィルタをかけず、取得した記事をそのまま利用する。
       articles = Array.isArray(headlinesData.articles)
         ? headlinesData.articles
         : [];
@@ -212,7 +180,6 @@ async function fetchJapaneseSources(apiKey, category = "") {
 
   const apiUrl =
     `https://newsapi.org/v2/top-headlines/sources?${params.toString()}`;
-
   const response = await newsApiFetch(apiUrl, apiKey);
   const data = await readJsonResponse(response);
 
