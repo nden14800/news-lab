@@ -1,3 +1,4 @@
+```js
 export async function onRequestGet(context) {
   const { request, env } = context;
   const url = new URL(request.url);
@@ -25,28 +26,22 @@ export async function onRequestGet(context) {
   );
 
   try {
-    let data;
+    let articles = [];
+    let totalResults = 0;
+    let endpoint = "";
 
     if (q) {
-      /*
-       * News API の Everything endpoint では、
-       * 現在の公式ドキュメント上、日本語 "ja" は
-       * language の有効値に含まれていません。
-       *
-       * そのため language=ja は付けず、
-       * 日本語キーワードをそのまま検索します。
-       */
       const params = new URLSearchParams({
         q,
         sortBy: "publishedAt",
-        pageSize: String(pageSize),
+        pageSize: "50",
         page: "1"
       });
 
-      const endpoint =
+      const apiUrl =
         `https://newsapi.org/v2/everything?${params.toString()}`;
 
-      const response = await fetch(endpoint, {
+      const response = await fetch(apiUrl, {
         method: "GET",
         headers: {
           "X-Api-Key": apiKey,
@@ -55,7 +50,7 @@ export async function onRequestGet(context) {
         }
       });
 
-      data = await readJsonResponse(response);
+      const data = await readJsonResponse(response);
 
       if (!response.ok || data.status === "error") {
         return json(
@@ -70,97 +65,36 @@ export async function onRequestGet(context) {
         );
       }
 
-      return json({
-        status: "ok",
-        totalResults: Number(data.totalResults || 0),
-        articles: Array.isArray(data.articles) ? data.articles : [],
-        fetchedAt: new Date().toISOString(),
-        endpoint: "everything",
-        query: q
-      });
-    }
+      totalResults = Number(data.totalResults || 0);
+      endpoint = "everything";
 
-    /*
-     * 日本向けカテゴリニュース
-     *
-     * 現在の News API では top-headlines の country パラメータとして
-     * "jp" を直接利用する方式ではなく、
-     * /top-headlines/sources?country=jp
-     * から日本のニュースソースを取得して、
-     * top-headlines? sources=...
-     * に渡します。
-     */
-    const allowedCategories = new Set([
-      "business",
-      "entertainment",
-      "general",
-      "health",
-      "science",
-      "sports",
-      "technology"
-    ]);
-
-    const safeCategory = allowedCategories.has(category)
-      ? category
-      : "general";
-
-    const sourceParams = new URLSearchParams({
-      country: "jp",
-      category: safeCategory
-    });
-
-    const sourcesEndpoint =
-      `https://newsapi.org/v2/top-headlines/sources?${sourceParams.toString()}`;
-
-    const sourcesResponse = await fetch(sourcesEndpoint, {
-      method: "GET",
-      headers: {
-        "X-Api-Key": apiKey,
-        "Accept": "application/json",
-        "User-Agent": "NewsLab-Experimental/1.0"
-      }
-    });
-
-    const sourcesData = await readJsonResponse(sourcesResponse);
-
-    if (!sourcesResponse.ok || sourcesData.status === "error") {
-      return json(
-        {
-          status: "error",
-          code: sourcesData?.code || "sources_error",
-          message:
-            sourcesData?.message ||
-            `News API sources returned HTTP ${sourcesResponse.status}`
-        },
-        sourcesResponse.status
+      articles = filterJapaneseArticles(
+        Array.isArray(data.articles) ? data.articles : []
       );
-    }
+    } else {
+      const allowedCategories = new Set([
+        "business",
+        "entertainment",
+        "general",
+        "health",
+        "science",
+        "sports",
+        "technology"
+      ]);
 
-    const sources = Array.isArray(sourcesData.sources)
-      ? sourcesData.sources
-      : [];
+      const safeCategory = allowedCategories.has(category)
+        ? category
+        : "general";
 
-    if (!sources.length) {
-      /*
-       * 日本ソースが取れなかった場合は、
-       * 一般検索にフォールバックします。
-       */
-      const fallbackQuery =
-        safeCategory === "general"
-          ? "日本"
-          : getFallbackKeyword(safeCategory);
-
-      const fallbackParams = new URLSearchParams({
-        q: fallbackQuery,
-        sortBy: "publishedAt",
-        pageSize: String(pageSize),
-        page: "1"
+      const sourceParams = new URLSearchParams({
+        country: "jp",
+        category: safeCategory
       });
 
-      const fallbackEndpoint =
-        `https://newsapi.org/v2/everything?${fallbackParams.toString()}`;
+      const sourcesUrl =
+        `https://newsapi.org/v2/top-headlines/sources?${sourceParams.toString()}`;
 
-      const fallbackResponse = await fetch(fallbackEndpoint, {
+      const sourcesResponse = await fetch(sourcesUrl, {
         method: "GET",
         headers: {
           "X-Api-Key": apiKey,
@@ -169,101 +103,114 @@ export async function onRequestGet(context) {
         }
       });
 
-      const fallbackData =
-        await readJsonResponse(fallbackResponse);
+      const sourcesData =
+        await readJsonResponse(sourcesResponse);
 
-      if (!fallbackResponse.ok || fallbackData.status === "error") {
+      if (
+        !sourcesResponse.ok ||
+        sourcesData.status === "error"
+      ) {
         return json(
           {
             status: "error",
-            code: fallbackData?.code || "fallback_error",
+            code: sourcesData?.code || "sources_error",
             message:
-              fallbackData?.message ||
-              `Fallback request returned HTTP ${fallbackResponse.status}`
+              sourcesData?.message ||
+              `News API sources returned HTTP ${sourcesResponse.status}`
           },
-          fallbackResponse.status
+          sourcesResponse.status
         );
       }
 
-      return json({
-        status: "ok",
-        totalResults: Number(fallbackData.totalResults || 0),
-        articles: Array.isArray(fallbackData.articles)
-          ? fallbackData.articles
-          : [],
-        fetchedAt: new Date().toISOString(),
-        endpoint: "everything-fallback",
-        category: safeCategory
-      });
-    }
+      const sources = Array.isArray(sourcesData.sources)
+        ? sourcesData.sources
+        : [];
 
-    /*
-     * top-headlines の sources パラメータは最大20ソース。
-     */
-    const sourceIds = sources
-      .map((source) => source?.id)
-      .filter(Boolean)
-      .slice(0, 20)
-      .join(",");
+      const sourceIds = sources
+        .map((source) => source?.id)
+        .filter(Boolean)
+        .slice(0, 20)
+        .join(",");
 
-    if (!sourceIds) {
-      return json({
-        status: "ok",
-        totalResults: 0,
-        articles: [],
-        fetchedAt: new Date().toISOString(),
-        endpoint: "top-headlines",
-        category: safeCategory
-      });
-    }
-
-    const headlineParams = new URLSearchParams({
-      sources: sourceIds,
-      pageSize: String(pageSize),
-      page: "1"
-    });
-
-    const headlineEndpoint =
-      `https://newsapi.org/v2/top-headlines?${headlineParams.toString()}`;
-
-    const headlineResponse = await fetch(headlineEndpoint, {
-      method: "GET",
-      headers: {
-        "X-Api-Key": apiKey,
-        "Accept": "application/json",
-        "User-Agent": "NewsLab-Experimental/1.0"
+      if (!sourceIds) {
+        return json({
+          status: "ok",
+          totalResults: 0,
+          articles: [],
+          fetchedAt: new Date().toISOString(),
+          endpoint: "top-headlines",
+          category: safeCategory
+        });
       }
-    });
 
-    const headlineData =
-      await readJsonResponse(headlineResponse);
+      const headlineParams = new URLSearchParams({
+        sources: sourceIds,
+        pageSize: "50",
+        page: "1"
+      });
 
-    if (!headlineResponse.ok || headlineData.status === "error") {
-      return json(
-        {
-          status: "error",
-          code: headlineData?.code || "headlines_error",
-          message:
-            headlineData?.message ||
-            `News API headlines returned HTTP ${headlineResponse.status}`
-        },
-        headlineResponse.status
+      const headlinesUrl =
+        `https://newsapi.org/v2/top-headlines?${headlineParams.toString()}`;
+
+      const headlinesResponse = await fetch(headlinesUrl, {
+        method: "GET",
+        headers: {
+          "X-Api-Key": apiKey,
+          "Accept": "application/json",
+          "User-Agent": "NewsLab-Experimental/1.0"
+        }
+      });
+
+      const headlinesData =
+        await readJsonResponse(headlinesResponse);
+
+      if (
+        !headlinesResponse.ok ||
+        headlinesData.status === "error"
+      ) {
+        return json(
+          {
+            status: "error",
+            code: headlinesData?.code || "headlines_error",
+            message:
+              headlinesData?.message ||
+              `News API returned HTTP ${headlinesResponse.status}`
+          },
+          headlinesResponse.status
+        );
+      }
+
+      totalResults = Number(
+        headlinesData.totalResults || 0
       );
+
+      endpoint = "top-headlines";
+
+      articles = filterJapaneseArticles(
+        Array.isArray(headlinesData.articles)
+          ? headlinesData.articles
+          : []
+      );
+
+      articles = deduplicateArticles(articles);
     }
+
+    articles = articles
+      .sort((a, b) => {
+        const aTime = Date.parse(a.publishedAt || "") || 0;
+        const bTime = Date.parse(b.publishedAt || "") || 0;
+        return bTime - aTime;
+      })
+      .slice(0, pageSize);
 
     return json({
       status: "ok",
-      totalResults: Number(headlineData.totalResults || 0),
-      articles: Array.isArray(headlineData.articles)
-        ? headlineData.articles
-        : [],
+      totalResults,
+      filteredResults: articles.length,
+      articles,
       fetchedAt: new Date().toISOString(),
-      endpoint: "top-headlines",
-      category: safeCategory,
-      sources: sources.map((source) => ({
-        id: source.id,
-        name: source.name
-      }))
+      endpoint,
+      language: "ja"
     });
   } catch (error) {
     return json(
@@ -278,6 +225,123 @@ export async function onRequestGet(context) {
       502
     );
   }
+}
+
+function filterJapaneseArticles(articles) {
+  return articles.filter((article) => {
+    if (!article || typeof article !== "object") {
+      return false;
+    }
+
+    const title = cleanText(article.title);
+    const description = cleanText(article.description);
+
+    if (!title) {
+      return false;
+    }
+
+    const text = `${title} ${description}`.trim();
+
+    /*
+     * 日本語に使われる文字を数えます。
+     * 漢字・ひらがな・カタカナを対象にして、
+     * 日本語文字の割合が低い記事を除外します。
+     */
+    const japaneseCharacters =
+      (text.match(
+        /[\u3040-\u309F\u30A0-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]/g
+      ) || []).length;
+
+    const latinCharacters =
+      (text.match(/[A-Za-z]/g) || []).length;
+
+    const meaningfulCharacters =
+      japaneseCharacters + latinCharacters;
+
+    if (meaningfulCharacters === 0) {
+      return false;
+    }
+
+    const japaneseRatio =
+      japaneseCharacters / meaningfulCharacters;
+
+    /*
+     * タイトルが完全に英語の場合は除外。
+     */
+    const titleJapanese =
+      (
+        title.match(
+          /[\u3040-\u309F\u30A0-\u30FF\u3400-\u4DBF\uF900-\uFAFF]/g
+        ) || []
+      ).length;
+
+    const titleLatin =
+      (title.match(/[A-Za-z]/g) || []).length;
+
+    if (
+      titleLatin >= 8 &&
+      titleJapanese === 0
+    ) {
+      return false;
+    }
+
+    /*
+     * 全体の日本語比率が低すぎる記事も除外。
+     */
+    if (
+      japaneseRatio < 0.12 &&
+      titleJapanese < 2
+    ) {
+      return false;
+    }
+
+    /*
+     * 明らかに外国語だけの見出しを除外。
+     */
+    const forbiddenOnlyPattern =
+      /^[A-Za-z0-9\s\-_:.,!?'"()[\]\/&+]+$/;
+
+    if (
+      title.length >= 8 &&
+      forbiddenOnlyPattern.test(title)
+    ) {
+      return false;
+    }
+
+    return true;
+  });
+}
+
+function deduplicateArticles(articles) {
+  const seen = new Set();
+
+  return articles.filter((article) => {
+    const url = cleanText(article.url);
+    const title = cleanText(article.title)
+      .toLowerCase()
+      .replace(/\s+/g, " ");
+
+    const key =
+      url ||
+      `${title}|${cleanText(article.source?.name)}`;
+
+    if (!key || seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
+    return true;
+  });
+}
+
+function cleanText(value) {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  return value
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 async function readJsonResponse(response) {
@@ -302,29 +366,23 @@ function clampInt(value, fallback, min, max) {
     return fallback;
   }
 
-  return Math.max(min, Math.min(max, number));
-}
-
-function getFallbackKeyword(category) {
-  const keywords = {
-    business: "ビジネス OR 経済 OR 企業",
-    entertainment: "エンタメ OR 映画 OR 音楽",
-    health: "医療 OR 健康",
-    science: "科学 OR 宇宙",
-    sports: "スポーツ",
-    technology: "テクノロジー OR AI OR IT",
-    general: "日本"
-  };
-
-  return keywords[category] || keywords.general;
+  return Math.max(
+    min,
+    Math.min(max, number)
+  );
 }
 
 function json(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: {
-      "content-type": "application/json; charset=UTF-8",
-      "cache-control": "no-store"
+  return new Response(
+    JSON.stringify(data),
+    {
+      status,
+      headers: {
+        "content-type":
+          "application/json; charset=UTF-8",
+        "cache-control": "no-store"
+      }
     }
-  });
+  );
 }
+```
