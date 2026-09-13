@@ -1,4 +1,3 @@
-```js
 export async function onRequestGet(context) {
   const { request, env } = context;
   const url = new URL(request.url);
@@ -242,11 +241,6 @@ function filterJapaneseArticles(articles) {
 
     const text = `${title} ${description}`.trim();
 
-    /*
-     * 日本語に使われる文字を数えます。
-     * 漢字・ひらがな・カタカナを対象にして、
-     * 日本語文字の割合が低い記事を除外します。
-     */
     const japaneseCharacters =
       (text.match(
         /[\u3040-\u309F\u30A0-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]/g
@@ -265,9 +259,6 @@ function filterJapaneseArticles(articles) {
     const japaneseRatio =
       japaneseCharacters / meaningfulCharacters;
 
-    /*
-     * タイトルが完全に英語の場合は除外。
-     */
     const titleJapanese =
       (
         title.match(
@@ -285,9 +276,6 @@ function filterJapaneseArticles(articles) {
       return false;
     }
 
-    /*
-     * 全体の日本語比率が低すぎる記事も除外。
-     */
     if (
       japaneseRatio < 0.12 &&
       titleJapanese < 2
@@ -295,9 +283,6 @@ function filterJapaneseArticles(articles) {
       return false;
     }
 
-    /*
-     * 明らかに外国語だけの見出しを除外。
-     */
     const forbiddenOnlyPattern =
       /^[A-Za-z0-9\s\-_:.,!?'"()[\]\/&+]+$/;
 
@@ -385,4 +370,3 @@ function json(data, status = 200) {
     }
   );
 }
-```
